@@ -21,8 +21,12 @@ SENDGRID_API_KEY = os.environ["SENDGRID_API_KEY"]
 
 
 def fetch_articles(topic: str, max_results: int = 30) -> list[dict]:
-    """Fetch recent articles about *topic* from NewsAPI (past 24 hours)."""
-    since = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Fetch recent articles about *topic* from NewsAPI (past 7 days).
+
+    NewsAPI free tier has a ~24 hour indexing delay, so searching only the
+    past day returns nothing. 7 days gives a reliable window of results.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     resp = requests.get(
         "https://newsapi.org/v2/everything",
         params={
@@ -36,7 +40,11 @@ def fetch_articles(topic: str, max_results: int = 30) -> list[dict]:
         timeout=15,
     )
     resp.raise_for_status()
-    raw = resp.json().get("articles", [])
+    data = resp.json()
+    if data.get("status") != "ok":
+        raise RuntimeError(f"NewsAPI error: {data.get('message', data)}")
+    raw = data.get("articles", [])
+    print(f"NewsAPI returned {data.get('totalResults', '?')} total results, fetched {len(raw)}")
     return [
         {
             "title": a["title"],
